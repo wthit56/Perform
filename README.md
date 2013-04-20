@@ -115,3 +115,4 @@ I do this by using a simple, naive, hacked-together "require" replacement I wrot
 
 ## TODO
 - All child Perform objects should be stopped when `.end`ing.
+- Add comments to the source and tests
