@@ -28,7 +28,7 @@ module.exports = (function () {
 
 			// all actions completed
 			if (this.actionsCompleted >= this.actions.length) {
-				this.callback.call(this);
+				this.end();
 			}
 			// actions still left to do, and not parallel
 			else if (!this.parallel) {
@@ -41,16 +41,16 @@ module.exports = (function () {
 		add: function (actions) {
 			if (!this.running) { return; }
 
-			this.actions.dirty=true;
-			
-			this.actions=[].concat(
-				this.actions.slice(0, this.actionsCompleted+1),
+			this.actions = [].concat(
+				this.actions.slice(0, this.actionsCompleted + 1),
 				Array.prototype.slice.call(arguments, 0),
-				this.actions.slice(this.actionsCompleted+1)
+				this.actions.slice(this.actionsCompleted + 1)
 			);
 
+			this.actions.dirty = true;
+
 			childActions.apply(this, arguments);
-			
+
 			if (this.parallel) {
 				runActions.call(this, arguments);
 			}
@@ -59,23 +59,22 @@ module.exports = (function () {
 		},
 
 		end: function (error) {
+			if (error && this.parent) {
+				this.parent.end(error);
+			}
+			else {
+				this.callback.call(this, error, this);
+				delete this.callback;
+			}
+
 			if (!this.running) { return; }
 			this.running = false;
 
-			if(this.bubble && this.parent){ // bubble up to parent
-				this.parent.end(error);
+			if (this.actions.dirty) {
+				this.actions = this.actionsOriginal.slice(0);
 			}
-			else{
-				this.callback.call(this, error);
-			}
-			this.bubble=true; // reset bubble
-			
+
 			return this;
-		},
-		
-		bubble:true,
-		cancelBubble:function(){
-			this.bubble=false;
 		},
 
 		run: function (callback) {
@@ -83,12 +82,8 @@ module.exports = (function () {
 
 			if (callback) { this.callback = callback; }
 
-			if(this.actions.dirty){
-				this.actions = this.actionsOriginal.slice(0);
-			}
-
 			if (!this.actions || this.actions.length <= 0) {
-				this.callback.call(this, new Error("No actions to perform."));
+				this.callback.call(this, new Error("No actions to perform."), this);
 				return;
 			}
 
@@ -106,7 +101,7 @@ module.exports = (function () {
 		}
 	};
 
-	
+
 	function runAction(action) {
 		var control = this;
 
@@ -116,10 +111,10 @@ module.exports = (function () {
 			});
 		}
 		else if (action instanceof Function) {
-			action.call(control);
+			action.call(control, control);
 		}
 		else {
-			control.end(new Error("Action not a function or Perform object ("+(action)+").", action));
+			control.end(new Error("Action not a function or Perform object (" + action + ").", action));
 		}
 	}
 
@@ -133,20 +128,19 @@ module.exports = (function () {
 		};
 	})();
 
-	var childActions=(function(){
+	var childActions = (function () {
 		var i, l;
-		
-		return function childActions(actions){
-			for(i=0, l=arguments.length; i<l;i++){
-				if(arguments[i] instanceof Perform){
-					arguments[i].parent=this;
+
+		return function childActions(actions) {
+			for (i = 0, l = arguments.length; i < l; i++) {
+				if (arguments[i] instanceof Perform) {
+					arguments[i].parent = this;
 				}
 			}
 		};
 	})();
-	
-	
-	
+
+
 	Perform.serial = function Perform_serial(actions) {
 		Perform.apply(this, arguments);
 	};
@@ -157,6 +151,7 @@ module.exports = (function () {
 		this.parallel = true;
 	};
 	Perform.parallel.prototype = Object.create(Perform.prototype);
+
 
 	return Perform;
 })();
